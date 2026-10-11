@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import { brokerageRouter } from './server/brokerageRoutes';
 
 dotenv.config();
 
@@ -15,6 +16,9 @@ const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
+
+// Mount Auth0 & Alpaca Brokerage routes
+app.use('/api', brokerageRouter);
 
 // Initialize server-side Gemini client
 const apiKey = process.env.GEMINI_API_KEY;

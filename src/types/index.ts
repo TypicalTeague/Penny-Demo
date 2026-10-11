@@ -78,6 +78,12 @@ export interface VerificationData {
 
 export type TapbackType = 'heart' | 'thumbs_up' | 'sprout' | 'laugh';
 
+export interface MessageActionButton {
+  id: string;
+  label: string;
+  action: 'open_onboarding' | 'view_timeline' | 'retry';
+}
+
 export interface Message {
   id: string;
   sender: 'user' | 'penny' | 'system';
@@ -88,6 +94,7 @@ export interface Message {
   planData?: PlanCardData;
   weeklyData?: WeeklyCardData;
   verificationData?: VerificationData;
+  actionButton?: MessageActionButton;
   tapback?: TapbackType;
   inReplyTo?: string; // Threaded reply reference
 }

@@ -3,16 +3,19 @@ import { Message, TapbackType } from '../types';
 import { NativePoll } from './NativePoll';
 import { PortfolioPlanCard } from './PortfolioPlanCard';
 import { WeeklyUpdateCard } from './WeeklyUpdateCard';
-import { ShieldCheck, Loader2 } from 'lucide-react';
+import { ShieldCheck, Loader2, Lock, ChevronRight } from 'lucide-react';
+import { MessageActionButton } from '../types';
 
 interface MessageBubbleProps {
   message: Message;
   onSelectPollOption?: (pollId: string, optionId: string) => void;
+  onActionButtonClick?: (action: MessageActionButton) => void;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   onSelectPollOption,
+  onActionButtonClick,
 }) => {
   // System divider (e.g. "One week later")
   if (message.type === 'system-divider') {
@@ -98,6 +101,23 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             }`}
           >
             {message.text}
+          </div>
+        )}
+
+        {/* Action Button (e.g. Verify & connect securely) */}
+        {message.actionButton && (
+          <div className="mt-2 w-full max-w-[270px]">
+            <button
+              type="button"
+              onClick={() => onActionButtonClick?.(message.actionButton!)}
+              className="min-h-[44px] w-full px-4 py-2.5 rounded-[16px] bg-[#007AFF] text-white font-medium text-[13.5px] flex items-center justify-between shadow-xs active:scale-98 transition-all hover:bg-blue-600 cursor-pointer"
+            >
+              <div className="flex items-center space-x-2">
+                <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="font-semibold">{message.actionButton.label}</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-blue-200" />
+            </button>
           </div>
         )}
 

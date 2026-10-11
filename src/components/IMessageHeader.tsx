@@ -1,12 +1,18 @@
 import React from 'react';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, ShieldCheck } from 'lucide-react';
 
 interface IMessageHeaderProps {
   onResetClick: () => void;
+  onTimelineClick?: () => void;
   planStatus?: string;
+  isAlpacaConnected?: boolean;
 }
 
-export const IMessageHeader: React.FC<IMessageHeaderProps> = ({ onResetClick }) => {
+export const IMessageHeader: React.FC<IMessageHeaderProps> = ({
+  onResetClick,
+  onTimelineClick,
+  isAlpacaConnected,
+}) => {
   return (
     <header className="h-[52px] w-full bg-[#f6f6f6]/90 backdrop-blur-md border-b border-[#00000018] flex items-center justify-between px-3 shrink-0 z-30 select-none">
       {/* Left: Back affordance */}
@@ -30,8 +36,14 @@ export const IMessageHeader: React.FC<IMessageHeaderProps> = ({ onResetClick }) 
       {/* Center: Penny avatar & contact identity */}
       <div className="flex flex-col items-center justify-center">
         {/* Sprout avatar badge */}
-        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shadow-xs border border-emerald-200/80 -mt-0.5">
+        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shadow-xs border border-emerald-200/80 -mt-0.5 relative">
           <span className="text-[17px] leading-none select-none">🌱</span>
+          {isAlpacaConnected && (
+            <span
+              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"
+              title="Alpaca Sandbox Active"
+            />
+          )}
         </div>
         {/* Contact Name */}
         <div className="flex items-center gap-1 mt-0.5">
@@ -44,14 +56,25 @@ export const IMessageHeader: React.FC<IMessageHeaderProps> = ({ onResetClick }) 
         </div>
       </div>
 
-      {/* Right: Discreet reset icon for presenter */}
-      <div className="flex items-center justify-end min-w-[70px]">
+      {/* Right: Judge Evidence Timeline & Reset */}
+      <div className="flex items-center justify-end min-w-[70px] space-x-0.5">
+        {onTimelineClick && (
+          <button
+            type="button"
+            onClick={onTimelineClick}
+            title="Judge Audit Timeline (J/P)"
+            aria-label="View judge audit timeline"
+            className="min-h-[44px] min-w-[32px] flex items-center justify-center text-zinc-400 hover:text-emerald-600 transition-colors"
+          >
+            <ShieldCheck className="w-4 h-4" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onResetClick}
           title="Reset demo (R)"
           aria-label="Reset demo conversation"
-          className="min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 active:scale-95 transition-all"
+          className="min-h-[44px] min-w-[32px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 active:scale-95 transition-all"
         >
           <RotateCcw className="w-4 h-4" />
         </button>

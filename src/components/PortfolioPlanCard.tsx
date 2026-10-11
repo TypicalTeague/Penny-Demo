@@ -124,7 +124,7 @@ export const PortfolioPlanCard: React.FC<PortfolioPlanCardProps> = ({ data }) =>
       {/* Card Footer note */}
       <div className="bg-[#f9f9fb] px-3.5 py-1.5 border-t border-black/5 text-center">
         <span className="text-[10px] text-[#8E8E93] tracking-tight">
-          Simulated paper portfolio · Zero real money moved
+          Alpaca Sandbox Paper Orders · Zero real money moved
         </span>
       </div>
     </div>

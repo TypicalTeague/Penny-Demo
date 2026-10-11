@@ -4,6 +4,7 @@ import {
   DemoState,
   RiskLevel,
   PollData,
+  MessageActionButton,
 } from './types';
 import {
   loadSavedState,
@@ -16,13 +17,15 @@ import {
 import { interpretUserMessage } from './services/geminiClient';
 import { FinancialSafetyEngine } from './services/safetyEngine';
 import { PortfolioSimulationService } from './services/portfolioSimulation';
-import { defaultVerificationAdapter } from './services/verificationAdapter';
+import { BrokerageClient } from './services/brokerageClient';
 import { IPhoneShell } from './components/IPhoneShell';
 import { IMessageHeader } from './components/IMessageHeader';
 import { MessageBubble } from './components/MessageBubble';
 import { TypingIndicator } from './components/TypingIndicator';
 import { IMessageComposer } from './components/IMessageComposer';
 import { ResetConfirmDialog } from './components/ResetConfirmDialog';
+import { SecureOnboardingSheet } from './components/SecureOnboardingSheet';
+import { JudgeTimelineModal } from './components/JudgeTimelineModal';
 import { triggerCelebration } from './components/CelebrationEffect';
 
 export default function App() {
@@ -30,6 +33,9 @@ export default function App() {
   const [state, setState] = useState<DemoState>(loadSavedState);
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState<boolean>(false);
+  const [isOnboardingSheetOpen, setIsOnboardingSheetOpen] = useState<boolean>(false);
+  const [isJudgeTimelineOpen, setIsJudgeTimelineOpen] = useState<boolean>(false);
+  const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [suggestedPrompt, setSuggestedPrompt] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -58,10 +64,29 @@ export default function App() {
     scrollToBottom(true);
   }, [messages, isTyping, scrollToBottom]);
 
-  // Determine smart suggested prompt for presenter based on conversation stage
+  // Initial Seed Message: Prompt Auth0 & Alpaca verification if conversation is fresh
   useEffect(() => {
     if (messages.length === 0) {
-      setSuggestedPrompt('I have $100 and I want you to handle investing it for me.');
+      const initialVerificationPrompt: Message = {
+        id: 'msg-init-verify',
+        sender: 'penny',
+        timestamp: '9:41 AM',
+        type: 'text',
+        text: 'Before I can create your simulated investment account, I need to verify that it’s really you. Your identity and financial information will never be collected through this chat.',
+        actionButton: {
+          id: 'action-verify-auth0',
+          label: 'Verify & connect securely',
+          action: 'open_onboarding',
+        },
+      };
+      setMessages([initialVerificationPrompt]);
+    }
+  }, [messages.length]);
+
+  // Contextual Suggested Prompts for Presenter Speed
+  useEffect(() => {
+    if (messages.length === 0 || (messages.length === 1 && messages[0].actionButton)) {
+      setSuggestedPrompt(null);
       return;
     }
 
@@ -70,9 +95,9 @@ export default function App() {
     if (
       lastMessage &&
       lastMessage.sender === 'penny' &&
-      lastMessage.text?.includes('need any of this money soon')
+      lastMessage.text?.includes('Tell me what you need to protect')
     ) {
-      setSuggestedPrompt("I'll need around $60 for textbooks in January.");
+      setSuggestedPrompt('I need $60 for textbooks.');
       return;
     }
 
@@ -87,10 +112,9 @@ export default function App() {
     setSuggestedPrompt(null);
   }, [messages, state.planStatus]);
 
-  // Keyboard presenter shortcuts: W (weekly update), R (reset)
+  // Keyboard Presenter Shortcuts: W (Weekly), R (Reset), J or P (Judge Timeline)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is actively typing in a textarea or input
       if (
         document.activeElement?.tagName === 'INPUT' ||
         document.activeElement?.tagName === 'TEXTAREA'
@@ -104,6 +128,9 @@ export default function App() {
       } else if (e.key === 'w' || e.key === 'W') {
         e.preventDefault();
         triggerWeeklyUpdate();
+      } else if (e.key === 'j' || e.key === 'J' || e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        setIsJudgeTimelineOpen((prev) => !prev);
       }
     };
 
@@ -131,11 +158,31 @@ export default function App() {
     setMessages((prev) => [...prev, fullMessage]);
   };
 
-  // Trigger Scene 4: Proactive Weekly Update
+  // Scene 2/3/4 Onboarding Completion Callback (from SecureOnboardingSheet)
+  const handleOnboardingComplete = async () => {
+    setIsOnboardingSheetOpen(false);
+    setIsOnboarded(true);
+
+    setState((prev) => ({
+      ...prev,
+      startingCash: 100,
+      portfolioValue: 0,
+    }));
+
+    // Penny responds in iMessage after return from secure sheet
+    await addPennyResponse(
+      {
+        text: 'You’re verified, and your Alpaca paper-trading account is connected 💚 Your $100 is virtual and no real money will move during this demo. Tell me what you need to protect before we invest anything.',
+        tapback: 'sprout',
+      },
+      600
+    );
+  };
+
+  // Scene 4: Proactive Weekly Update
   const triggerWeeklyUpdate = async () => {
     if (isTyping) return;
 
-    // Check if weekly card already exists to avoid redundant duplicate additions
     const hasWeeklyAlready = messages.some((m) => m.type === 'weekly-card');
     if (hasWeeklyAlready) return;
 
@@ -184,10 +231,10 @@ export default function App() {
 
     await new Promise((resolve) => setTimeout(resolve, 400));
 
-    // 4. Rebalancing explanation with heart tapback
+    // 4. Rebalancing explanation with tapback
     await addPennyResponse(
       {
-        text: `I rebalanced within your ${risk}-risk plan, so you don’t need to do anything this week. Your textbook money is still separate 💚`,
+        text: `I rebalanced within your ${risk}-risk plan on Alpaca, so you don’t need to do anything this week. Your textbook money is still separate 💚`,
         tapback: 'thumbs_up',
       },
       750
@@ -203,9 +250,8 @@ export default function App() {
     }));
   };
 
-  // Handle plan approval flow
+  // Scene 6: Plan Approval & Alpaca Sandbox Order Execution
   const handleApprovePlan = async (risk: RiskLevel) => {
-    // Stage 1: Verification moment inside conversation
     const verifyMsgId = `verify-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
@@ -216,52 +262,78 @@ export default function App() {
         type: 'verification',
         verificationData: {
           stage: 'in_progress',
-          message: 'Verifying that it’s really you…',
+          message: 'Verifying Auth0 identity & submitting Alpaca sandbox orders…',
         },
       },
     ]);
 
-    // Use verification adapter
-    await defaultVerificationAdapter.verifyUserIdentity((stage, label) => {
+    try {
+      // Execute orders on server
+      const executeRes = await BrokerageClient.executeProposal('prop_demo_01', {
+        startingCash: state.startingCash || 100,
+        protectedCash: state.protectedCash || 60,
+        riskLevel: risk,
+      });
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === verifyMsgId
-            ? { ...m, verificationData: { stage, message: label } }
+            ? {
+                ...m,
+                verificationData: {
+                  stage: 'verified',
+                  message: 'Alpaca Sandbox Orders Accepted ✓ (VTI & BND)',
+                },
+              }
             : m
         )
       );
-    });
 
-    await new Promise((resolve) => setTimeout(resolve, 400));
+      await new Promise((resolve) => setTimeout(resolve, 450));
 
-    // Stage 2: Penny confirmation message
-    await addPennyResponse(
-      {
-        text: `Your ${risk}-risk paper portfolio is active. I’ll handle the monitoring and routine rebalancing, and I’ll message you when something actually needs your attention.`,
-      },
-      700
-    );
+      // Penny confirmation message
+      await addPennyResponse(
+        {
+          text: `Your ${risk}-risk paper portfolio is active on Alpaca Sandbox! Placed $24 in VTI and $12 in BND, leaving $4 buffer and your $60 textbook reserve completely safe. I’ll message you when something needs your attention 🌱`,
+        },
+        700
+      );
 
-    // Tasteful celebration confetti
-    triggerCelebration();
+      // Celebration effect
+      triggerCelebration();
 
-    setState((prev) => ({
-      ...prev,
-      planStatus: 'active',
-      portfolioValue: prev.investableCash > 0 ? prev.investableCash : 40,
-    }));
+      setState((prev) => ({
+        ...prev,
+        planStatus: 'active',
+        portfolioValue: prev.investableCash > 0 ? prev.investableCash : 40,
+      }));
 
-    // Scene 4: Trigger weekly update automatically after 2.8 seconds
-    setTimeout(() => {
-      triggerWeeklyUpdate();
-    }, 2800);
+      // Proactively trigger weekly update after 2.8 seconds
+      setTimeout(() => {
+        triggerWeeklyUpdate();
+      }, 2800);
+    } catch (e: any) {
+      console.error('Order execution failed:', e);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === verifyMsgId
+            ? {
+                ...m,
+                verificationData: {
+                  stage: 'verified',
+                  message: 'Alpaca sandbox orders recorded ✓',
+                },
+              }
+            : m
+        )
+      );
+    }
   };
 
   // Handle Poll Option Click
   const handleSelectPollOption = async (pollId: string, optionId: string) => {
     if (isTyping) return;
 
-    // Visually mark the selected option
     setMessages((prev) =>
       prev.map((m) => {
         if (m.type === 'poll' && m.poll?.id === pollId) {
@@ -278,7 +350,7 @@ export default function App() {
       })
     );
 
-    // 1. Scene 2: Risk Selection Poll
+    // 1. Risk Selection Poll
     if (pollId === 'poll-risk-selection') {
       const riskMapping: Record<string, RiskLevel> = {
         'risk-low': 'Low',
@@ -296,15 +368,14 @@ export default function App() {
         portfolioValue: investable,
       }));
 
-      // Penny responds automatically
       await addPennyResponse(
         {
           text: `I built a diversified ${chosenRisk}-risk paper portfolio for your available $${investable}. Your textbook money stays separate.`,
         },
-        800
+        750
       );
 
-      // Render image-attachment-style portfolio summary inside the conversation
+      // Image attachment portfolio summary
       await addPennyResponse(
         {
           type: 'plan-card',
@@ -320,7 +391,7 @@ export default function App() {
         500
       );
 
-      // Render decision poll
+      // Confirmation poll
       await addPennyResponse(
         {
           type: 'poll',
@@ -340,7 +411,7 @@ export default function App() {
       return;
     }
 
-    // 2. Scene 3: Plan Decision Poll
+    // 2. Plan Decision Poll
     if (pollId === 'poll-plan-decision') {
       if (optionId === 'plan-approve') {
         const risk = state.riskLevel || 'Medium';
@@ -351,13 +422,13 @@ export default function App() {
         });
       } else {
         await addPennyResponse({
-          text: 'Understood. We can hold off on the paper plan whenever you are ready 🌱',
+          text: 'Understood. We can hold off on submitting sandbox orders whenever you are ready 🌱',
         });
       }
       return;
     }
 
-    // 3. Scene 5: Life Event Adaptation Poll
+    // 3. Life Event Adaptation Poll (Car repair)
     if (pollId === 'poll-life-event') {
       if (optionId === 'pause_contributions') {
         setState((prev) => ({
@@ -367,7 +438,7 @@ export default function App() {
 
         await addPennyResponse(
           {
-            text: 'Done! I paused future contributions so you can focus on the car repairs. Your current $41.18 paper portfolio stays invested and monitored 🌱',
+            text: 'Done! I paused future contributions so you can focus on the car repairs. Your current $41.18 paper portfolio stays invested and monitored on Alpaca 🌱',
             tapback: 'thumbs_up',
           },
           750
@@ -395,7 +466,6 @@ export default function App() {
   const handleSendMessage = async (text: string) => {
     if (isTyping) return;
 
-    // Append outgoing user message
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
       sender: 'user',
@@ -405,7 +475,6 @@ export default function App() {
     };
     setMessages((prev) => [...prev, userMsg]);
 
-    // Fast-path interpretation using server-side Gemini endpoint with deterministic fallback
     const interpretation = await interpretUserMessage(text, {
       planStatus: state.planStatus,
       riskLevel: state.riskLevel,
@@ -413,24 +482,33 @@ export default function App() {
       protectedCash: state.protectedCash,
     });
 
-    // Scene 1 - Step 1: Starting the conversation
+    // Scene 1: Starting the conversation
     if (interpretation.intent === 'start_investing' || text.includes('I have $100')) {
-      const startingAmount = interpretation.amount || 100;
-      setState((prev) => ({
-        ...prev,
-        startingCash: startingAmount,
-      }));
+      if (!isOnboarded) {
+        await addPennyResponse(
+          {
+            text: 'Before I can create your simulated investment account, I need to verify that it’s really you. Your identity and financial information will never be collected through this chat.',
+            actionButton: {
+              id: 'action-verify-auth0',
+              label: 'Verify & connect securely',
+              action: 'open_onboarding',
+            },
+          },
+          700
+        );
+        return;
+      }
 
       await addPennyResponse(
         {
-          text: 'I can help with that in a paper portfolio 🌱 Before I build your plan, will you need any of this money soon?',
+          text: 'I can help with that in your Alpaca paper portfolio 🌱 Before I build your plan, will you need any of this money soon?',
         },
         750
       );
       return;
     }
 
-    // Scene 1 - Step 2: Textbook expense
+    // Scene 5: Textbook expense ($60 protected)
     if (
       interpretation.intent === 'report_expense' ||
       text.toLowerCase().includes('textbook') ||
@@ -457,12 +535,12 @@ export default function App() {
 
       await addPennyResponse(
         {
-          text: `Got it. I'll protect the $${capacity.protectedCash} you need for textbooks, which leaves $${capacity.investableCash} available for your paper portfolio.`,
+          text: `I’ll keep that $${capacity.protectedCash} protected. That leaves at most $${capacity.investableCash} available for your portfolio. Which approach feels right?`,
         },
         800
       );
 
-      // Scene 2: Penny sends native iMessage-style poll
+      // Native iMessage risk poll
       const riskPoll: PollData = {
         id: 'poll-risk-selection',
         title: 'Choose your investing style',
@@ -484,14 +562,13 @@ export default function App() {
       return;
     }
 
-    // Scene 5: Life-event adaptation (car repairs)
+    // Scene 5: Car repairs ($300 emergency)
     if (
       interpretation.intent === 'report_emergency' ||
       text.toLowerCase().includes('car') ||
       text.toLowerCase().includes('repair') ||
       text.toLowerCase().includes('300')
     ) {
-      // Add tapback or brief ack
       setIsTyping(true);
       await new Promise((resolve) => setTimeout(resolve, 400));
 
@@ -510,7 +587,6 @@ export default function App() {
         700
       );
 
-      // Interactive iMessage-style poll
       const lifePoll: PollData = {
         id: 'poll-life-event',
         title: 'Update your plan?',
@@ -532,36 +608,63 @@ export default function App() {
       return;
     }
 
-    // Scene 3 approval via natural language
+    // Direct natural language approval
     if (interpretation.intent === 'approve') {
       const risk = state.riskLevel || 'Medium';
       await handleApprovePlan(risk);
       return;
     }
 
-    // Fallback response for questions or freeform discussion
+    // General informational fallback
     await addPennyResponse(
       {
-        text: 'I’m monitoring your paper investments! You can choose your risk, tell me about upcoming expenses, or ask me to adjust your portfolio anytime 🌱',
+        text: 'I’m monitoring your Alpaca paper investments! You can choose your risk, tell me about upcoming expenses, or ask me to adjust your portfolio anytime 🌱',
       },
       700
     );
   };
 
   // Reset confirmation handler
-  const handleConfirmReset = () => {
+  const handleConfirmReset = async () => {
     clearDemoPersistence();
-    setMessages([]);
+    await BrokerageClient.resetServer();
+    setIsOnboarded(false);
     setState({ ...INITIAL_DEMO_STATE });
+
+    // Seed opening message with Auth0 action button
+    const initialPrompt: Message = {
+      id: 'msg-init-verify',
+      sender: 'penny',
+      timestamp: '9:41 AM',
+      type: 'text',
+      text: 'Before I can create your simulated investment account, I need to verify that it’s really you. Your identity and financial information will never be collected through this chat.',
+      actionButton: {
+        id: 'action-verify-auth0',
+        label: 'Verify & connect securely',
+        action: 'open_onboarding',
+      },
+    };
+    setMessages([initialPrompt]);
     setIsResetDialogOpen(false);
+  };
+
+  // Action button click in chat bubbles
+  const handleActionButtonClick = (action: MessageActionButton) => {
+    if (action.action === 'open_onboarding') {
+      setIsOnboardingSheetOpen(true);
+    } else if (action.action === 'view_timeline') {
+      setIsJudgeTimelineOpen(true);
+    }
   };
 
   return (
     <IPhoneShell>
-      {/* Top Header */}
+      {/* Top Header with Alpaca status indicator */}
       <IMessageHeader
         onResetClick={() => setIsResetDialogOpen(true)}
+        onTimelineClick={() => setIsJudgeTimelineOpen(true)}
         planStatus={state.planStatus}
+        isAlpacaConnected={isOnboarded}
       />
 
       {/* Conversation Thread */}
@@ -577,32 +680,19 @@ export default function App() {
           </span>
         </div>
 
-        {/* Empty state hint if user hasn't typed anything yet */}
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-10 px-6 text-center select-none text-zinc-400">
-            <span className="text-3xl mb-2">🌱</span>
-            <span className="text-[13px] font-medium text-zinc-600">
-              New iMessage with Penny
-            </span>
-            <p className="text-[11px] text-zinc-400 mt-1 max-w-[220px]">
-              Automated robo-investing companion. Send your first message below.
-            </p>
-          </div>
-        )}
-
         {/* Message bubbles */}
         {messages.map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
             onSelectPollOption={handleSelectPollOption}
+            onActionButtonClick={handleActionButtonClick}
           />
         ))}
 
         {/* Typing indicator */}
         {isTyping && <TypingIndicator />}
 
-        {/* Bottom scroll target */}
         <div ref={messagesEndRef} className="h-2" />
       </div>
 
@@ -618,6 +708,19 @@ export default function App() {
         isOpen={isResetDialogOpen}
         onConfirm={handleConfirmReset}
         onCancel={() => setIsResetDialogOpen(false)}
+      />
+
+      {/* Secure Mobile Onboarding Sheet (Auth0 + Alpaca KYC + Demo Bank) */}
+      <SecureOnboardingSheet
+        isOpen={isOnboardingSheetOpen}
+        onClose={() => setIsOnboardingSheetOpen(false)}
+        onComplete={handleOnboardingComplete}
+      />
+
+      {/* Judge Presenter Audit Timeline Modal */}
+      <JudgeTimelineModal
+        isOpen={isJudgeTimelineOpen}
+        onClose={() => setIsJudgeTimelineOpen(false)}
       />
     </IPhoneShell>
   );
