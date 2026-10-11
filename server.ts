@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -141,8 +142,16 @@ Remember: YOU DO NOT compute portfolio allocations, calculate investable cash, o
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
   const server = http.createServer(app);
+  const distPath = path.resolve(__dirname, 'dist');
+  const indexHtmlPath = path.resolve(distPath, 'index.html');
+  const hasDist = fs.existsSync(indexHtmlPath);
 
-  if (!isProd) {
+  if (isProd && hasDist) {
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(indexHtmlPath);
+    });
+  } else {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
@@ -152,11 +161,6 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-    });
   }
 
   server.listen(PORT, '0.0.0.0', () => {
