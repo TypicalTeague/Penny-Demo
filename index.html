@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      // Ignore WebSocket / HMR errors per environment constraints
+      window.addEventListener('unhandledrejection', function(event) {
+        if (
+          event.reason &&
+          (String(event.reason).includes('WebSocket') ||
+           (event.reason.message && event.reason.message.includes('WebSocket')))
+        ) {
+          event.preventDefault();
+        }
+      });
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Penny - iMessage Robo-Investing Companion</title>
+    <meta name="description" content="An interactive iMessage-first automated robo-investing companion prototype powered by structured financial logic." />
+    <meta property="og:title" content="Penny - iMessage Robo-Investing Companion" />
+    <meta property="og:description" content="An interactive iMessage-first automated robo-investing companion prototype powered by structured financial logic." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#f2f2f7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  </head>
+  <body class="bg-[#1c1c1e] antialiased select-none overflow-hidden m-0 p-0 font-sans">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

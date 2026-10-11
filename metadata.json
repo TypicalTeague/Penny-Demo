@@ -1,0 +1,6 @@
+{
+  "name": "Penny - iMessage Robo-Investing Companion",
+  "description": "An interactive iMessage-first automated robo-investing companion prototype powered by structured financial logic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
